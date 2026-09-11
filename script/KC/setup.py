@@ -16,9 +16,9 @@ SyS = get_ipython().system
 KAGGLE = 'KAGGLE_DATA_PROXY_TOKEN' in iRON
 
 def _args():
-    RESET = '\033[0m'
-    RED = '\033[31m'
-    PURPLE = '\033[38;5;135m'
+    RESET = '\u001B[0m'
+    RED = '\u001B[31m'
+    PURPLE = '\u001B[38;5;135m'
     ERR = f'{PURPLE}[{RESET}{RED}ERROR{RESET}{PURPLE}]{RESET}'
 
     L = ['A1111', 'Forge', 'ReForge', 'ReForge-old', 'Forge-Classic', 'Forge-Neo', 'ComfyUI', 'SwarmUI']
@@ -35,13 +35,14 @@ def _args():
     arg3 = args.hf_read_token.strip() if args.hf_read_token else ''
 
     if not any(arg1 == option.lower() for option in L):
-        print(f'{ERR}: invalid webui option: "{args.webui}"\nAvailable webui options: {", ".join(L)}')
+        print(f'{ERR}: invalid webui option: "{args.webui}"
+Available webui options: {", ".join(L)}')
         return None, None, None
 
     if not arg2:
         print(f'{ERR}: CivitAI API key is missing.')
         return None, None, None
-    if re.search(r'\s+', arg2):
+    if re.search(r's+', arg2):
         print(f'{ERR}: CivitAI API key contains spaces "{arg2}" - not allowed.')
         return None, None, None
     if len(arg2) < 32:
@@ -49,7 +50,7 @@ def _args():
         return None, None, None
 
     if not arg3: arg3 = ''
-    if re.search(r'\s+', arg3): arg3 = ''
+    if re.search(r's+', arg3): arg3 = ''
 
     ui = next(option for option in L if arg1 == option.lower())
     return ui, arg2, arg3
@@ -175,7 +176,6 @@ def _reqs(W, M):
     ]
 
     u = M / 'upscale_models' if ui in ['ComfyUI', 'SwarmUI'] else M / 'ESRGAN'
-
     upscalers = [
         f'https://huggingface.co/gutris1/webui/resolve/main/misc/4x-UltraSharp.pth {u}',
         f'https://huggingface.co/gutris1/webui/resolve/main/misc/4x-AnimeSharp.pth {u}',
@@ -274,7 +274,7 @@ def _scripts():
 
     for k, v in d.items():
         l = f'Path({str(v)!r})' if isinstance(v, Path) else repr(v)
-        t = re.sub(rf'^{k}\s*=.*$', f'{k} = {l}', t, flags=re.MULTILINE)
+        t = re.sub(rf'^{k}s*=.*$', f'{k} = {l}', t, flags=re.MULTILINE)
 
     uid.write_text(t)
 
@@ -283,6 +283,36 @@ def _scripts():
     sys.path.append(str(STR))
 
     for scripts in [nenen, melon, uid, MRK]: get_ipython().run_line_magic('run', str(scripts))
+
+def _patch_cupang():
+    """Patch cupang.py para tratar erros de conexao no Colab"""
+    cupang_path = Path('/root/.ipython/profile_default/startup/cupang.py')
+    if cupang_path.exists():
+        content = cupang_path.read_text()
+        
+        # Trata erro no log.debug
+        if 'log.debug(line.rstrip())' in content and 'except (OSError' not in content:
+            content = content.replace(
+                'log.debug(line.rstrip())',
+                '''try:
+                        log.debug(line.rstrip())
+                    except (OSError, ConnectionError, BrokenPipeError):
+                        pass  # Ignora erro de conexao no Colab'''
+            )
+            
+            # Trata erro no handler.close
+            content = content.replace(
+                'for handler in log.handlers:
+                handler.close()',
+                '''for handler in log.handlers:
+                    try:
+                        handler.close()
+                    except (OSError, ConnectionError, BrokenPipeError):
+                        pass  # Ignora erro ao fechar no Colab'''
+            )
+            
+            cupang_path.write_text(content)
+            print("[PATCH] cupang.py corrigido para tratar erros de conexao no Colab!")
 
 G = 'https://raw.githubusercontent.com/neschaos/segsmaker/main'
 
@@ -304,6 +334,9 @@ SRC.mkdir(parents=True, exist_ok=True)
 
 ui, civitai_key, hf_read_token = _args()
 _scripts()
+
+# Aplica o patch no cupang.py
+_patch_cupang()
 
 from nenen88 import clone, say, download, tempe, pull
 from _segsmaker_ import UID
