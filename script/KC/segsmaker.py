@@ -50,7 +50,17 @@ def ZROK_enable(token):
 
     else: SyS(e); print()
 
-def webui_launch(launch_args, skip_comfyui_check, ngrok_token=None, zrok_token=None):
+def webui_launch(
+    launch_args,
+    skip_comfyui_check,
+    ngrok_token=None,
+    zrok_token=None,
+    use_gradio=True,
+    use_pinggy=True,
+    use_cloudflared=True,
+    max_retries=3,
+    retry_delay=5,
+):
     iRON['PYTHONWARNINGS'] = 'ignore'
 
     if ui in ['ComfyUI', 'SwarmUI']:
@@ -99,13 +109,22 @@ def webui_launch(launch_args, skip_comfyui_check, ngrok_token=None, zrok_token=N
     zrok2 = f'zrok2 share public localhost:{port} --headless'
     gradio = f'gradio-tun {port}'
 
-    Zuberg = Alice(port)
+    # MODIFICACAO: Tunnel agora relanca sozinho um tunel que caiu (ate
+    # max_retries vezes, com backoff exponencial), em vez de so morrer.
+    Zuberg = Alice(port, max_retries=max_retries, retry_delay=retry_delay)
     Zuberg.logger.setLevel(logging.DEBUG)
     Add = lambda command, name, pattern: Zuberg.add_tunnel(command=command, name=name, pattern=pattern)
 
-    if not (ngrok_token or zrok_token):
+    # MODIFICACAO: antes, Gradio/Pinggy/Cloudflared só entravam quando
+    # nenhum token (ngrok/zrok) era passado - ou seja, era "zrok OU o
+    # combo padrao", nunca os dois juntos. Agora cada tunel (incluindo
+    # zrok/ngrok) e escolhido individualmente, e todos podem rodar ao
+    # mesmo tempo. Assim, se um tunel cair, os outros continuam de pe.
+    if use_gradio:
         Add(gradio, 'Gradio', r'https://[\w-]+\.gradio\.live')
+    if use_pinggy:
         Add(pinggy, 'Pinggy', r'https://[\w-]+\.run\.pinggy-free\.link')
+    if use_cloudflared:
         Add(cloudflared, 'Cloudflared', r'[\w-]+\.trycloudflare\.com')
 
     if ngrok_token:
@@ -124,12 +143,27 @@ if __name__ == '__main__':
     parser.add_argument('--skip-comfyui-check', action='store_true', help='Skip checking custom node dependencies for ComfyUI')
     parser.add_argument('--N', type=str, help='NGROK tunnel (pass a token or do nothing)', default=None)
     parser.add_argument('--Z', type=str, help='ZROK2 tunnel (pass a token or do nothing)', default=None)
+    parser.add_argument('--no-gradio', action='store_true', help='Nao rodar o tunel Gradio')
+    parser.add_argument('--no-pinggy', action='store_true', help='Nao rodar o tunel Pinggy')
+    parser.add_argument('--no-cloudflared', action='store_true', help='Nao rodar o tunel Cloudflared')
+    parser.add_argument('--max-retries', type=int, default=3, help='Quantas vezes tentar relançar um tunel que caiu sozinho')
+    parser.add_argument('--retry-delay', type=int, default=5, help='Espera inicial (segundos) antes de tentar relançar um tunel; dobra a cada tentativa')
 
     args, unknown = parser.parse_known_args()
     launch_args = ' '.join(unknown)
 
     try:
         trashing()
-        webui_launch(launch_args, args.skip_comfyui_check, args.N, args.Z)
+        webui_launch(
+            launch_args,
+            args.skip_comfyui_check,
+            ngrok_token=args.N,
+            zrok_token=args.Z,
+            use_gradio=not args.no_gradio,
+            use_pinggy=not args.no_pinggy,
+            use_cloudflared=not args.no_cloudflared,
+            max_retries=args.max_retries,
+            retry_delay=args.retry_delay,
+        )
     except KeyboardInterrupt:
         pass
