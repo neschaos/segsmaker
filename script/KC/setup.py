@@ -35,14 +35,13 @@ def _args():
     arg3 = args.hf_read_token.strip() if args.hf_read_token else ''
 
     if not any(arg1 == option.lower() for option in L):
-        print(f'{ERR}: invalid webui option: "{args.webui}"
-Available webui options: {", ".join(L)}')
+        print(f'{ERR}: invalid webui option: "{args.webui}"\nAvailable webui options: {", ".join(L)}')
         return None, None, None
 
     if not arg2:
         print(f'{ERR}: CivitAI API key is missing.')
         return None, None, None
-    if re.search(r's+', arg2):
+    if re.search(r'\s+', arg2):
         print(f'{ERR}: CivitAI API key contains spaces "{arg2}" - not allowed.')
         return None, None, None
     if len(arg2) < 32:
@@ -50,7 +49,7 @@ Available webui options: {", ".join(L)}')
         return None, None, None
 
     if not arg3: arg3 = ''
-    if re.search(r's+', arg3): arg3 = ''
+    if re.search(r'\s+', arg3): arg3 = ''
 
     ui = next(option for option in L if arg1 == option.lower())
     return ui, arg2, arg3
@@ -274,7 +273,7 @@ def _scripts():
 
     for k, v in d.items():
         l = f'Path({str(v)!r})' if isinstance(v, Path) else repr(v)
-        t = re.sub(rf'^{k}s*=.*$', f'{k} = {l}', t, flags=re.MULTILINE)
+        t = re.sub(rf'^{k}\s*=.*$', f'{k} = {l}', t, flags=re.MULTILINE)
 
     uid.write_text(t)
 
@@ -289,9 +288,9 @@ def _patch_cupang():
     cupang_path = Path('/root/.ipython/profile_default/startup/cupang.py')
     if cupang_path.exists():
         content = cupang_path.read_text()
-        
-        # Trata erro no log.debug
+
         if 'log.debug(line.rstrip())' in content and 'except (OSError' not in content:
+            # Patch 1: protege a chamada de log.debug() dentro do loop de leitura
             content = content.replace(
                 'log.debug(line.rstrip())',
                 '''try:
@@ -299,18 +298,24 @@ def _patch_cupang():
                     except (OSError, ConnectionError, BrokenPipeError):
                         pass  # Ignora erro de conexao no Colab'''
             )
-            
-            # Trata erro no handler.close
-            content = content.replace(
-                'for handler in log.handlers:
-                handler.close()',
-                '''for handler in log.handlers:
-                    try:
-                        handler.close()
-                    except (OSError, ConnectionError, BrokenPipeError):
-                        pass  # Ignora erro ao fechar no Colab'''
+
+            # Patch 2: protege o handler.close() no finally.
+            # Usa regex (em vez de string literal) porque a indentacao exata
+            # do "for handler in log.handlers:" pode variar entre versoes
+            # do arquivo baixado do repo - um match literal falhava
+            # silenciosamente e o patch nunca era aplicado.
+            content = re.sub(
+                r'([ \t]*)for handler in log\.handlers:\n[ \t]*handler\.close\(\)',
+                lambda m: (
+                    f'{m.group(1)}for handler in log.handlers:\n'
+                    f'{m.group(1)}    try:\n'
+                    f'{m.group(1)}        handler.close()\n'
+                    f'{m.group(1)}    except (OSError, ConnectionError, BrokenPipeError):\n'
+                    f'{m.group(1)}        pass  # Ignora erro ao fechar no Colab'
+                ),
+                content
             )
-            
+
             cupang_path.write_text(content)
             print("[PATCH] cupang.py corrigido para tratar erros de conexao no Colab!")
 
