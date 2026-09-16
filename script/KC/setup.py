@@ -145,6 +145,23 @@ def _symlinks(M):
     for c in d['sym'](M): SyS(c)
     for p, f in d['links'](M): SyS(f'ln -s {p} {f}')
 
+def _project_files(W):
+    scripts = [
+        f'{G}/script/controlnet.py {W}/asd',
+        f'{G}/script/cn15.py {W}/asd',
+        f'{G}/script/cnxl.py {W}/asd',
+        f'{G}/script/KC/segsmaker.py {W}'
+    ]
+    for item in scripts: download(item)
+
+    if ui not in ['SwarmUI', 'ComfyUI']:
+        for i in [
+            f'{G}/config/NoCrypt_miku.json {W}/tmp/gradio_themes',
+            f'{G}/config/user.css {W} user.css'
+        ]: download(i)
+
+        if ui not in ['Forge', 'Forge-Neo']: download(f'{G}/config/config.json {W} config.json')
+
 def _reqs(W, M):
     CD(W)
 
@@ -166,13 +183,7 @@ def _reqs(W, M):
 
     _symlinks(M)
     _tunnels()
-
-    scripts = [
-        f'{G}/script/controlnet.py {W}/asd',
-        f'{G}/script/cn15.py {W}/asd',
-        f'{G}/script/cnxl.py {W}/asd',
-        f'{G}/script/KC/segsmaker.py {W}'
-    ]
+    _project_files(W)
 
     u = M / 'upscale_models' if ui in ['ComfyUI', 'SwarmUI'] else M / 'ESRGAN'
     upscalers = [
@@ -186,21 +197,12 @@ def _reqs(W, M):
         f'https://huggingface.co/subby2006/NMKD-YandereNeoXL/resolve/main/4x_NMKD-YandereNeoXL_200k.pth {u}',
         f'https://huggingface.co/subby2006/NMKD-UltraYandere/resolve/main/4x_NMKD-UltraYandere_300k.pth {u}'
     ]
-
-    line = scripts + upscalers
-    for item in line: download(item)
+    for item in upscalers: download(item)
 
     if ui not in ['SwarmUI', 'ComfyUI']:
         e = 'jpg' if ui in ['Forge-Classic', 'Forge-Neo'] else 'png'
         SyS(f'rm -f {W}/html/card-no-preview.{e}')
-
-        for i in [
-            f'https://huggingface.co/gutris1/webui/resolve/main/misc/card-no-preview.png {W}/html card-no-preview.{e}',
-            f'{G}/config/NoCrypt_miku.json {W}/tmp/gradio_themes',
-            f'{G}/config/user.css {W} user.css'
-        ]: download(i)
-
-        if ui not in ['Forge', 'Forge-Neo']: download(f'{G}/config/config.json {W} config.json')
+        download(f'https://huggingface.co/gutris1/webui/resolve/main/misc/card-no-preview.png {W}/html card-no-preview.{e}')
 
 def _setup():
     WEBUI = HOME / ui
@@ -217,6 +219,7 @@ def _setup():
         SyS(f"git pull origin {UID[ui]['branch']}")
 
         _tunnels()
+        _project_files(WEBUI)
 
     else:
         say(f"<b>【{{red}} {ui.replace('-', ' ')}{{d}} 】{{red}}</b>")
@@ -284,13 +287,11 @@ def _scripts():
     for scripts in [nenen, melon, uid, MRK]: get_ipython().run_line_magic('run', str(scripts))
 
 def _patch_cupang():
-    """Patch cupang.py para tratar erros de conexao no Colab"""
     cupang_path = Path('/root/.ipython/profile_default/startup/cupang.py')
     if cupang_path.exists():
         content = cupang_path.read_text()
 
         if 'log.debug(line.rstrip())' in content and 'except (OSError' not in content:
-            # Patch 1: protege a chamada de log.debug() dentro do loop de leitura
             content = content.replace(
                 'log.debug(line.rstrip())',
                 '''try:
@@ -299,11 +300,6 @@ def _patch_cupang():
                         pass  # Ignora erro de conexao no Colab'''
             )
 
-            # Patch 2: protege o handler.close() no finally.
-            # Usa regex (em vez de string literal) porque a indentacao exata
-            # do "for handler in log.handlers:" pode variar entre versoes
-            # do arquivo baixado do repo - um match literal falhava
-            # silenciosamente e o patch nunca era aplicado.
             content = re.sub(
                 r'([ \t]*)for handler in log\.handlers:\n[ \t]*handler\.close\(\)',
                 lambda m: (
@@ -340,7 +336,6 @@ SRC.mkdir(parents=True, exist_ok=True)
 ui, civitai_key, hf_read_token = _args()
 _scripts()
 
-# Aplica o patch no cupang.py
 _patch_cupang()
 
 from nenen88 import clone, say, download, tempe, pull
