@@ -86,6 +86,10 @@ def webui_launch(
         SyS(f"echo -n {int(time.time()) + 3600} > {CWD / 'asd/pinggytimer.txt'}")
         launch_args += ' --enable-insecure-extension-access --disable-console-progressbars --theme dark'
 
+        if ui == 'Forge':
+            if '--medvram' not in launch_args and '--lowvram' not in launch_args:
+                launch_args += ' --medvram'
+
         if '--share' in launch_args: launch_args = launch_args.replace('--share', '')
         if KAGGLE: launch_args += f' --encrypt-pass={PW}'
 
@@ -109,17 +113,10 @@ def webui_launch(
     zrok2 = f'zrok2 share public localhost:{port} --headless'
     gradio = f'gradio-tun {port}'
 
-    # MODIFICACAO: Tunnel agora relanca sozinho um tunel que caiu (ate
-    # max_retries vezes, com backoff exponencial), em vez de so morrer.
     Zuberg = Alice(port, max_retries=max_retries, retry_delay=retry_delay)
     Zuberg.logger.setLevel(logging.DEBUG)
     Add = lambda command, name, pattern: Zuberg.add_tunnel(command=command, name=name, pattern=pattern)
 
-    # MODIFICACAO: antes, Gradio/Pinggy/Cloudflared só entravam quando
-    # nenhum token (ngrok/zrok) era passado - ou seja, era "zrok OU o
-    # combo padrao", nunca os dois juntos. Agora cada tunel (incluindo
-    # zrok/ngrok) e escolhido individualmente, e todos podem rodar ao
-    # mesmo tempo. Assim, se um tunel cair, os outros continuam de pe.
     if use_gradio:
         Add(gradio, 'Gradio', r'https://[\w-]+\.gradio\.live')
     if use_pinggy:
