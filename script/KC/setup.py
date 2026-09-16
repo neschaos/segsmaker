@@ -146,6 +146,16 @@ def _symlinks(M):
     for p, f in d['links'](M): SyS(f'ln -s {p} {f}')
 
 def _project_files(W):
+    # Apaga arquivos para forçar o download atualizado
+    targets = [
+        W / 'asd' / 'controlnet.py',
+        W / 'asd' / 'cn15.py',
+        W / 'asd' / 'cnxl.py',
+        W / 'segsmaker.py'
+    ]
+    for target in targets:
+        Path(target).unlink(missing_ok=True)
+
     scripts = [
         f'{G}/script/controlnet.py {W}/asd',
         f'{G}/script/cn15.py {W}/asd',
@@ -153,6 +163,14 @@ def _project_files(W):
         f'{G}/script/KC/segsmaker.py {W}'
     ]
     for item in scripts: download(item)
+
+    # Patch no segsmaker.py para filtrar --max-retries antes de invocar o launch.py
+    seg_file = W / 'segsmaker.py'
+    if seg_file.exists():
+        txt = seg_file.read_text()
+        if 'sys.argv' in txt and '--max-retries' not in txt:
+            patch = "import sys\nsys.argv = [a for a in sys.argv if not a.startswith('--max-retries=')]\n"
+            seg_file.write_text(patch + txt)
 
     if ui not in ['SwarmUI', 'ComfyUI']:
         for i in [
@@ -258,6 +276,10 @@ def _setup():
         CD(HOME)
 
 def _scripts():
+    # Deleta arquivos locais de inicialização para forçar atualização
+    for s in [startup, cupang, uid, nenen, melon, MRK]:
+        s.unlink(missing_ok=True)
+
     for s in [
         f'{startup} {G}/script/KC/00-startup.py',
         f'{cupang} {G}/script/cupang.py',
@@ -265,7 +287,7 @@ def _scripts():
         f'{nenen} {G}/script/nenen88.py',
         f'{melon} {G}/script/melon00.py',
         f'{MRK} {G}/script/marking.py'
-    ]: SyS(f'wget -qO {s}')
+    ]: SyS(f'wget -q -O {s}')
 
     d = {
         'HOME': HOME,
