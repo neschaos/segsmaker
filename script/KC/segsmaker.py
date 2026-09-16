@@ -86,10 +86,6 @@ def webui_launch(
         SyS(f"echo -n {int(time.time()) + 3600} > {CWD / 'asd/pinggytimer.txt'}")
         launch_args += ' --enable-insecure-extension-access --disable-console-progressbars --theme dark'
 
-        if ui == 'Forge':
-            if '--medvram' not in launch_args and '--lowvram' not in launch_args:
-                launch_args += ' --medvram'
-
         if '--share' in launch_args: launch_args = launch_args.replace('--share', '')
         if KAGGLE: launch_args += f' --encrypt-pass={PW}'
 
